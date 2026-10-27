@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>NotchNote</title>
+<link rel="icon" href="assets/notnot-app.png">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="cmeasure"></div>
+<div id="island">
+  <i class="ear a"></i><i class="ear b"></i>
+  <div class="bg"></div>
+  <div class="clip">
+    <div id="vCompact" class="view"></div>
+    <div id="vPage" class="view">
+      <div class="status" id="status"></div>
+      <div id="pages"></div>
+      <nav class="tabbar"><div class="tabs" id="tabs"></div></nav>
+      <div id="ptoast"></div>
+    </div>
+    <div id="vAlert" class="view"></div>
+  </div>
+</div>
+<script src="tauri-bridge.js"></script>
+<script src="icons.js"></script>
+<script src="core.js"></script>
+<script src="owl.js"></script>
+<script src="prayer.js"></script>
+<script src="tasks.js"></script>
+<script src="logbook.js"></script>
+<script src="notes.js"></script>
+<script src="clip.js"></script>
+<script src="ai.js"></script>
+<script src="music.js"></script>
+<script src="focus.js"></script>
+<script src="settings.js"></script>
+<script>NN.boot();</script>
+</body>
+</html>

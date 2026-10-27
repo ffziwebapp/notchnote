@@ -1,0 +1,44 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "NotchNote",
+  "version": "1.2.0",
+  "identifier": "id.notchnote.app",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$DATA/NotchNote/**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "NotchNote",
+    "copyright": "NotchNote",
+    "category": "Productivity",
+    "shortDescription": "Notch produktivitas untuk Windows",
+    "longDescription": "NotchNote: to-do, logbook, catatan, klip, AI, musik dengan lirik, jadwal sholat, fokus, dan Pomodoro dalam satu notch, ditemani Notnot.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "startMenuFolder": "NotchNote"
+      }
+    }
+  }
+}

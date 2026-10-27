@@ -1,0 +1,60 @@
+[package]
+name = "notchnote"
+version = "1.2.0"
+description = "NotchNote - notch produktivitas untuk Windows"
+authors = ["NotchNote"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "notchnote_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "protocol-asset"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "2.12", default-features = false, features = ["tls", "json"] }
+regex = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+base64 = "0.22"
+sha1_smol = "1"
+urlencoding = "2"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+arboard = { version = "3.4", default-features = false, features = ["image-data"] }
+rand = "0.8"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+sysinfo = { version = "0.30", default-features = false }
+windows = { version = "0.61", features = [
+  "Foundation",
+  "Media_Control",
+  "Storage_Streams",
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_Media_Audio",
+  "Win32_Security_Cryptography",
+  "Win32_System_Com",
+  "Win32_System_DataExchange",
+  "Win32_System_Power",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
