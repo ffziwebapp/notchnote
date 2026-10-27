@@ -262,9 +262,9 @@ Teman tinggal mengunduh installer-nya dan menjalankannya. Setiap orang memakai A
 
 1. Ubah kodenya.
 2. Naikkan nomor versi di `src-tauri/tauri.conf.json` dan `src-tauri/Cargo.toml`.
-3. Di GitHub, buka **Releases → Draft a new release**. Buat tag baru, misalnya `v1.2.1`, lalu klik **Publish release**.
+3. Unggah ke GitHub (branch `main`).
 
-Sekitar 10 menit kemudian, installer-nya otomatis menempel di rilis itu.
+Sekitar 10 menit kemudian, rilis baru lengkap dengan installer-nya muncul otomatis di halaman Releases. Kalau nomor versinya tidak dinaikkan, installer di rilis versi itu diganti dengan yang terbaru.
 
 ## 13. Privasi
 

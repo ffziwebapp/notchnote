@@ -25,7 +25,7 @@ Tidak perlu memasang Python atau aplikasi lain. Kalau komputernya belum punya Mi
 
 - `ui/`: antarmuka (HTML, CSS, JS)
 - `src-tauri/`: aplikasi Rust ([Tauri 2](https://tauri.app)), termasuk jendela transparan, tray, pintasan keyboard, pelacak fokus, kontrol media Windows, lirik, AI, klip, dan autostart
-- `.github/workflows/build.yml`: setiap push ke `main` membuat installer, yang bisa diunduh dari tab **Actions → Artifacts**. Setiap rilis baru (Releases → Draft a new release, tag misalnya `v1.2.1`) otomatis diberi installer.
+- `.github/workflows/build.yml`: setiap push ke `main` membuat installer, yang bisa diunduh dari tab **Actions → Artifacts**. Rilis `v<versi>` dibuat atau diperbarui otomatis sesuai versi di `src-tauri/tauri.conf.json`, jadi untuk rilis baru cukup naikkan nomor versinya.
 
 Menjalankan di komputer sendiri (perlu [Rust](https://rustup.rs) dan Node.js):
 
