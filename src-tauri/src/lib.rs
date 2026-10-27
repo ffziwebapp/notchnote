@@ -725,6 +725,15 @@ pub fn run() {
             // seret, klik-tembus, dan kursor
             let c3 = core.clone();
             std::thread::spawn(move || window::ui_loop(c3));
+            // uji otomatis (hanya build debug): laporkan keadaan antarmuka ke ui.json
+            #[cfg(debug_assertions)]
+            if std::env::var("NOTCHNOTE_SELFTEST").is_ok() {
+                let w2 = w.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(8));
+                    let _ = w2.eval("NN.open('logbook'); setTimeout(()=>NN.call('save','ui',JSON.stringify({selftest:true, ready:NN.ready, view:NN.isl.view, page:NN.isl.page, dock:NN.isl.layout.dock, scr:NN.isl.layout.scr, pages:NN.cfg.notch.pages, tasks:NN.st.tasks.length, lb:document.querySelectorAll('.lbrow').length, version:NN.init.version, clips:NN.pages.clip?1:0})), 1500)");
+                });
+            }
             // cadangan: kalau antarmuka tidak memanggil "ready" (misal error), tetap tampilkan setelah 5 detik
             let c4 = core.clone();
             std::thread::spawn(move || {

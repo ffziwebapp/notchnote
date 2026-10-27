@@ -58,7 +58,7 @@ mod imp {
                 return (String::new(), String::new(), 0);
             }
             let mut pid = 0u32;
-            GetWindowThreadProcessId(h, Some(&mut pid));
+            GetWindowThreadProcessId(h, Some(&mut pid as *mut u32));
             (process_name(pid), window_text(h), pid)
         }
     }
@@ -86,7 +86,7 @@ mod imp {
                 return false;
             }
             let mut pid = 0u32;
-            GetWindowThreadProcessId(h, Some(&mut pid));
+            GetWindowThreadProcessId(h, Some(&mut pid as *mut u32));
             if pid == std::process::id() {
                 return false;
             }
