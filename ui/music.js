@@ -64,20 +64,34 @@
 
   NN.page('music', {
     icon: 'music', label: 'Musik',
-    size: () => [700, 380],
+    size: () => (NN.cfg.music && NN.cfg.music.showLyr === false && M.s.has && !M.s.ad) ? [430, 330] : [700, 380],
     init() {
+      M.cache = {};
       NN.on('media', s => {
         const o = M.s, n = JSON.parse(s);
-        const changed = (o.title !== n.title || o.artist !== n.artist);
         if (n.art === undefined) n.art = o.art;
+        const key = (n.title || '') + '|' + (n.artist || '');
+        // lagu benar-benar berganti? ("tidak ada lagu" sesaat tidak dihitung, supaya lirik tidak hilang)
+        const changed = n.has && key !== M.curKey;
+        if (n.has) M.curKey = key;
         M.s = n; M.sync(n);
-        if (changed) { M.lyr = null; M.lines = []; M.idx = -1; this.searchOpen = false; this.results = null; }
+        if (changed) {
+          const c = M.cache[key];
+          M.lyr = c || null; M.lines = c ? c.lines : []; M.idx = -1; this.searchOpen = false; this.results = null;
+          // lirik belum datang dalam 4 detik: minta lagi ke aplikasi
+          clearTimeout(this._lt);
+          if (!c) this._lt = setTimeout(() => { if (M.curKey === key && (!M.lyr || M.lyr.status === 'loading')) NN.call('lyricsGet'); }, 4000);
+        }
         if (this.visible()) { if (changed || o.has !== n.has || o.ad !== n.ad || o.art !== n.art) this.render(this.el); else this.refresh(true); }
       });
       NN.on('lyrics', s => {
         const l = JSON.parse(s);
         if (l.key !== M.key()) return;
-        M.lyr = l; M.lines = l.synced ? parseLRC(l.synced) : []; M.idx = -1;
+        // lirik yang sudah ada jangan ditimpa status "mencari" dari permintaan ulang
+        if (l.status === 'loading' && M.lyr && M.lyr.status === 'ok') return;
+        l.lines = l.synced ? parseLRC(l.synced) : [];
+        if (l.status !== 'loading') M.cache[l.key] = l;
+        M.lyr = l; M.lines = l.lines; M.idx = -1;
         if (this.visible()) this.render(this.el);
       });
       NN.on('lyricsResults', s => {
@@ -108,8 +122,9 @@
       const mc = NN.cfg.music || {};
       const artBg = s.art && mc.artBg !== false;
       const art = s.art ? ' style="background-image:url(\'' + esc(s.art) + '\')"' : '';
+      const showLyr = mc.showLyr !== false;
       el.innerHTML = head(s.source || s.app) +
-        '<div class="mus' + (artBg ? ' has-art' : '') + ' ls-' + (mc.lyrSize || 'm') + '">' +
+        '<div class="mus' + (artBg ? ' has-art' : '') + (showLyr ? '' : ' nolyr') + ' ls-' + (mc.lyrSize || 'm') + '">' +
         (artBg ? '<div class="mus-bg"' + art + '></div>' : '') +
         '<div class="mus-l">' +
           '<div class="mus-h"><div class="art ' + (s.playing ? 'play' : 'paused') + '" id="mArt"' + art + '>' + (s.art ? '' : icon('music', 22)) + '</div>' +
@@ -118,9 +133,10 @@
           '<div class="mus-p"><span id="mPos">0:00</span><div class="bar' + (s.canSeek ? ' seek' : '') + '" id="mBar" title="' + (s.canSeek ? 'Klik untuk lompat' : '') + '"><i id="mFill"></i></div><span id="mLeft">' + (s.dur ? '-' + fmt(s.dur) : '') + '</span></div>' +
           '<div class="mus-c"><button class="ibtn" data-m="prev" title="Sebelumnya">' + icon('prev', 22) + '</button>' +
           '<button class="ibtn playb" data-m="toggle" id="mPlay" title="Putar/jeda">' + icon(s.playing ? 'pause' : 'play', 22) + '</button>' +
-          '<button class="ibtn" data-m="next" title="Berikutnya">' + icon('next', 22) + '</button></div>' +
+          '<button class="ibtn" data-m="next" title="Berikutnya">' + icon('next', 22) + '</button>' +
+          '<button class="ibtn lyrtog' + (showLyr ? ' on' : '') + '" data-lyrtog title="' + (showLyr ? 'Sembunyikan lirik' : 'Tampilkan lirik') + '">' + icon('lines', 18) + '</button></div>' +
         '</div>' +
-        '<div class="mus-r">' + this.lyricsHtml() + '</div></div>';
+        (showLyr ? '<div class="mus-r">' + this.lyricsHtml() + '</div>' : '') + '</div>';
       this.bind(el);
       M.idx = -2;
       this.refresh(true);
@@ -138,6 +154,11 @@
         }, { passive: false });
       }
       el.onclick = e => {
+        if (e.target.closest('[data-lyrtog]')) {
+          NN.cfg.music.showLyr = NN.cfg.music.showLyr === false;
+          NN.save('cfg'); self.render(el); NN.retarget();
+          return;
+        }
         const b = e.target.closest('[data-m]');
         if (b) {
           NN.call('mediaCmd', b.dataset.m);

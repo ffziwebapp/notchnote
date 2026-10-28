@@ -44,6 +44,13 @@ pub struct WinState {
     pub layout: Value,
     pub mon_sig: String,
     pub visible: bool,
+    /// titik jangkar notch di layar (piksel fisik), area kerja monitor, posisi menempel, arah tumbuh
+    pub anchor: Option<(f64, f64)>,
+    pub work: (f64, f64, f64, f64),
+    pub dock_now: String,
+    pub grow: String,
+    pub want_pos: (i32, i32),
+    pub fixes: u32,
 }
 
 impl WinState {
@@ -58,7 +65,8 @@ impl WinState {
             }
         }
         WinState { st, zoom, sf: 0.0, pos: (0.0, 0.0), size: (0, 0), drag: None, rect: None, fs_hidden: false, force_until: 0.0, last_cursor: None,
-            ignoring: None, layout: json!({}), mon_sig: String::new(), visible: false }
+            ignoring: None, layout: json!({}), mon_sig: String::new(), visible: false,
+            anchor: None, work: (0.0, 0.0, 0.0, 0.0), dock_now: String::new(), grow: "down".into(), want_pos: (0, 0), fixes: 0 }
     }
 }
 
@@ -137,9 +145,16 @@ pub fn layout_for(ws: &WinState, dock: &str, m: &Mon, along: Option<f64>, center
         y = y.max(gy).min(gy + gh - wh);
     }
     let (x, y) = (x.round(), y.round());
-    let lay = json!({"dock": dock, "ax": (anchor.0 - x) / z, "ay": (anchor.1 - y) / z, "grow": grow,
-        "scr": {"x": (gx - x) / z, "y": (gy - y) / z, "w": gw / z, "h": gh / z}});
+    let mut lay = lay_from(dock, anchor, grow, m.work, (x, y), z);
+    lay["_anchor"] = json!([anchor.0, anchor.1]);
     ((x, y), (ww.round() as u32, wh.round() as u32), lay)
+}
+
+/// Info tata letak untuk antarmuka, dihitung dari posisi kiri-atas area isi jendela (piksel fisik)
+pub fn lay_from(dock: &str, anchor: (f64, f64), grow: &str, work: (f64, f64, f64, f64), origin: (f64, f64), z: f64) -> Value {
+    let (gx, gy, gw, gh) = work;
+    json!({"dock": dock, "ax": (anchor.0 - origin.0) / z, "ay": (anchor.1 - origin.1) / z, "grow": grow,
+        "scr": {"x": (gx - origin.0) / z, "y": (gy - origin.1) / z, "w": gw / z, "h": gh / z}})
 }
 
 /// Hitung perpindahan (tanpa menyentuh jendela; dipanggil sambil memegang kunci)
@@ -166,13 +181,89 @@ pub fn place(core: &Core, dragging: bool) {
     let mut ws = core.win.lock().unwrap();
     let Some(m) = screen_in(&all, prim, &ws) else { return };
     let dock = jstr(&ws.st, &["dock"]);
-    let (pos, size, mut lay) = layout_for(&ws, if dock.is_empty() { "top" } else { &dock }, &m, None, None, true);
+    let dock = if dock.is_empty() { "top".to_string() } else { dock };
+    let (pos, size, mut lay) = layout_for(&ws, &dock, &m, None, None, true);
     let mv = plan_move(&mut ws, pos, size, m.sf);
+    remember(&mut ws, &lay, &m, &dock, mv.1);
+    if let Some(o) = lay.as_object_mut() {
+        o.remove("_anchor");
+    }
     lay["dragging"] = json!(dragging);
     ws.layout = lay.clone();
+    ws.fixes = 0;
     drop(ws);
     apply_move(core, mv);
     let _ = core.app.emit("layout", lay.to_string());
+    // Windows kadang menaruh/mengukur jendela sedikit berbeda dari yang diminta: cek posisi sebenarnya
+    let app = core.app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(180));
+        if let Some(c) = tauri::Manager::try_state::<std::sync::Arc<Core>>(&app) {
+            sync_actual(&c, true);
+        }
+    });
+}
+
+fn remember(ws: &mut WinState, lay: &Value, m: &Mon, dock: &str, want: (i32, i32)) {
+    let a = &lay["_anchor"];
+    ws.anchor = Some((a[0].as_f64().unwrap_or(0.0), a[1].as_f64().unwrap_or(0.0)));
+    ws.work = m.work;
+    ws.dock_now = dock.to_string();
+    ws.grow = lay["grow"].as_str().unwrap_or("down").to_string();
+    ws.want_pos = want;
+}
+
+/// Baca posisi & ukuran jendela yang SEBENARNYA dari Windows, lalu samakan notch dan area klik dengannya.
+pub fn sync_actual(core: &Core, log_it: bool) {
+    let Some(w) = core.window() else { return };
+    let (Ok(ip), Ok(isz), Ok(sf)) = (w.inner_position(), w.inner_size(), w.scale_factor()) else { return };
+    let op = w.outer_position().ok();
+    let mut ws = core.win.lock().unwrap();
+    if ws.drag.is_some() {
+        return;
+    }
+    let Some(anchor) = ws.anchor else { return };
+    let z = ws.zoom * sf;
+    let origin = (ip.x as f64, ip.y as f64);
+    let (iw, ih) = (isz.width as f64, isz.height as f64);
+    if log_it {
+        log(format!(
+            "posisi: minta {:?} ukuran {:?} | sebenarnya isi {:?} luar {:?} ukuran {}x{} | skala {} zoom {} | jangkar {:?} dock {}",
+            ws.want_pos, ws.size, (ip.x, ip.y), op.map(|o| (o.x, o.y)), isz.width, isz.height, sf, ws.zoom, anchor, ws.dock_now
+        ));
+    }
+    // jangkar jatuh di luar jendela: minta Windows memindahkan lagi (maks. 3 kali)
+    let outside = anchor.0 < origin.0 - 1.0 || anchor.0 > origin.0 + iw + 1.0 || anchor.1 < origin.1 - 1.0 || anchor.1 > origin.1 + ih + 1.0;
+    if outside && ws.fixes < 3 {
+        ws.fixes += 1;
+        let (want, size) = (ws.want_pos, ws.size);
+        log(format!("jangkar di luar jendela, atur ulang ({}x)", ws.fixes));
+        drop(ws);
+        let _ = w.set_size(PhysicalSize::new(size.0, size.1));
+        let _ = w.set_position(PhysicalPosition::new(want.0, want.1));
+        let app = core.app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            if let Some(c) = tauri::Manager::try_state::<std::sync::Arc<Core>>(&app) {
+                sync_actual(&c, true);
+            }
+        });
+        return;
+    }
+    ws.pos = origin;
+    ws.sf = sf;
+    let mut lay = lay_from(&ws.dock_now.clone(), anchor, &ws.grow.clone(), ws.work, origin, z);
+    let old = ws.layout.clone();
+    let diff = |a: &Value, b: &Value| (a.as_f64().unwrap_or(0.0) - b.as_f64().unwrap_or(0.0)).abs() > 0.5;
+    let changed = diff(&lay["ax"], &old["ax"]) || diff(&lay["ay"], &old["ay"]) || diff(&lay["scr"]["x"], &old["scr"]["x"]) || diff(&lay["scr"]["y"], &old["scr"]["y"])
+        || diff(&lay["scr"]["w"], &old["scr"]["w"]) || diff(&lay["scr"]["h"], &old["scr"]["h"]);
+    if changed {
+        lay["dragging"] = json!(false);
+        ws.layout = lay.clone();
+        drop(ws);
+        log("tata letak disesuaikan dengan posisi jendela sebenarnya");
+        let _ = core.app.emit("layout", lay.to_string());
+    }
 }
 
 /// Ukuran berubah (Pengaturan → Tampilan → Ukuran notch)
@@ -264,6 +355,10 @@ fn drag_tick(core: &Core) {
     let (pos, size, mut lay) = layout_for(&ws, dock, &m, along, Some(center), false);
     let size_changed = size != ws.size;
     let mv = plan_move(&mut ws, pos, size, m.sf);
+    remember(&mut ws, &lay, &m, dock, mv.1);
+    if let Some(o) = lay.as_object_mut() {
+        o.remove("_anchor");
+    }
     let d = ws.drag.as_mut().unwrap();
     d.along = along;
     d.center = center;
@@ -329,6 +424,8 @@ fn set_ignore(core: &Core, ignore: bool) {
 pub fn ui_loop(core: std::sync::Arc<Core>) {
     let mut last_feed = 0.0f64;
     let mut last_inside = false;
+    let mut out_from: Option<(f64, f64)> = None;
+    let mut out_sent = true;
     let mut last_active: Option<bool> = None;
     let mut last_active_check = 0.0f64;
     loop {
@@ -353,8 +450,18 @@ pub fn ui_loop(core: std::sync::Arc<Core>) {
                 set_ignore(&core, !inside);
                 // kursor benar-benar keluar dari notch: beri tahu antarmuka (WebView2 kadang tidak mengirim "pointerleave"
                 // setelah jendela dibuat tembus klik, sehingga panel tidak menutup sendiri)
+                // hanya kalau kursor memang digerakkan di luar notch (bukan karena panel mengecil saat ganti menu)
                 if last_inside && !inside {
-                    let _ = core.app.emit("hoverOut", true);
+                    out_from = Some(cur);
+                    out_sent = false;
+                }
+                if inside {
+                    out_from = None;
+                } else if let (Some(p0), false) = (out_from, out_sent) {
+                    if (cur.0 - p0.0).abs() + (cur.1 - p0.1).abs() > 6.0 {
+                        out_sent = true;
+                        let _ = core.app.emit("hoverOut", true);
+                    }
                 }
                 last_inside = inside;
                 // kursor untuk mata Notnot (~30x per detik)
@@ -490,8 +597,8 @@ mod tests {
         for sf in [1.0, 1.25, 1.5, 1.75] {
             let m = Mon { name: "A".into(), full: (0.0, 0.0, 1920.0, 1080.0), work: (0.0, 0.0, 1920.0, 1032.0), sf };
             for dock in ["top", "bottom", "left", "right", "float"] {
-                let w = WinState { st: json!({"dock": dock, "along": 0.5, "fx": 0.5, "fy": 0.5}), zoom: 1.0, sf: 0.0, pos: (0.0, 0.0), size: (0, 0), drag: None,
-                    rect: None, fs_hidden: false, force_until: 0.0, last_cursor: None, ignoring: None, layout: json!({}), mon_sig: String::new(), visible: true };
+                let mut w = WinState::new(1.0);
+                w.st = json!({"dock": dock, "along": 0.5, "fx": 0.5, "fy": 0.5});
                 let ((x, y), (ww, wh), lay) = layout_for(&w, dock, &m, None, None, true);
                 let (ax, ay) = (lay["ax"].as_f64().unwrap(), lay["ay"].as_f64().unwrap());
                 let (cw, ch) = (ww as f64 / sf, wh as f64 / sf);

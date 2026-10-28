@@ -116,7 +116,7 @@
   NN.DEFAULTS = {
     v: 2,
     theme: { bg: 'notnot', accent: '#7c6cf7', opacity: 100, glow: true, motion: 'normal', scale: 100, compat: false, weight: 'normal' },
-    music: { artBg: true, lyrSize: 'm', lead: 0 },
+    music: { artBg: true, lyrSize: 'm', lead: 0, showLyr: true },
     notch: { hover: false, lyrics: true, hideFullscreen: false, lock: false, peekPrayer: true, takeover: true,
       slots: { left: 'clock', center: 'music', right: 'auto', leftAlt: 'none', centerAlt: 'nexttask', rightAlt: 'none' },
       pages: ['tasks', 'notes', 'clip', 'ai', 'music', 'prayer', 'focus', 'timer'] },
@@ -460,6 +460,7 @@
     const prevPage = isl.page, prevSub = isl.sub, wasPanel = isl.view === 'page';
     if (wasPanel && prevPage && prevPage !== id && NN.pages[prevPage].hide) NN.pages[prevPage].hide();
     isl.page = id; isl.sub = sub == null ? null : sub;
+    isl.resizeAt = Date.now();
     if (id !== 'settings') { NN.st.ui.page = id; NN.save('ui'); }
     $$('.page').forEach(n => { n.classList.remove('on', 'enter-l', 'enter-r', 'enter-u'); });
     const sec = $('.page[data-p="' + id + '"]');
@@ -626,9 +627,12 @@
         if (NN.cfg.notch.hover) { clearTimeout(hoverT); hoverT = setTimeout(() => { if (isl.hovered && isl.view === 'compact') NN.toggle(); }, 380); }
       }
     });
-    el.addEventListener('pointerleave', () => {
+    el.addEventListener('pointerleave', e => {
       isl.hovered = false; clearTimeout(hoverT);
       if (isl.dragging) return;
+      // panel baru saja berubah ukuran (ganti menu) sehingga kursor "keluar" padahal tidak digerakkan:
+      // jangan tutup. Aplikasi akan mengirim hoverOut kalau kursor memang digerakkan menjauh.
+      if (window.TauriBridge && !e.nnSynthetic && Date.now() - (isl.resizeAt || 0) < 900 && isl.view === 'page') return;
       if (isl.view === 'compact') NN.retarget();
       if (isl.view === 'alert' && isl.alert && isl.alert._expire) dismissAlert();
       if (isl.view === 'page' && !isl.pinned) {

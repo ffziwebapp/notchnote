@@ -82,6 +82,45 @@ mod imp {
         source: String,
         src_key: String,
         src_at: f64,
+        /// aplikasi pemutar yang terakhir dipakai (supaya tidak lompat-lompat antar tab/aplikasi)
+        pref_app: String,
+        /// sejak kapan tidak ada lagu / gagal membaca (0 = sedang ada lagu)
+        empty_since: f64,
+        had_song: bool,
+    }
+
+    fn is_playing(s: &Session) -> bool {
+        s.GetPlaybackInfo().and_then(|p| p.PlaybackStatus()).map(|x| x == Status::Playing).unwrap_or(false)
+    }
+
+    fn aumid(s: &Session) -> String {
+        s.SourceAppUserModelId().map(|h| h.to_string()).unwrap_or_default()
+    }
+
+    /// Pilih pemutar: yang sedang memutar lagu lebih diutamakan, lalu pemutar yang terakhir dipakai.
+    fn pick_session(m: &Manager, pref: &str) -> Option<Session> {
+        let cur = m.GetCurrentSession().ok();
+        if let Some(c) = &cur {
+            if is_playing(c) {
+                return cur;
+            }
+        }
+        let mut all = vec![];
+        if let Ok(v) = m.GetSessions() {
+            for i in 0..v.Size().unwrap_or(0) {
+                if let Ok(x) = v.GetAt(i) {
+                    all.push(x);
+                }
+            }
+        }
+        let playing: Vec<&Session> = all.iter().filter(|x| is_playing(x)).collect();
+        if let Some(x) = playing.iter().find(|x| aumid(x) == pref).or_else(|| playing.first()) {
+            return Some((*x).clone());
+        }
+        if let Some(x) = all.iter().find(|x| !pref.is_empty() && aumid(x) == pref) {
+            return Some(x.clone());
+        }
+        cur
     }
 
     fn command(s: &Session, c: &str) {
@@ -118,14 +157,19 @@ mod imp {
         }
         let mut mgr: Option<Manager> = None;
         let mut st = St { last_payload: None, last_sent: 0.0, art_url: String::new(), was_playing: None, play_since: 0.0, tl_key: None, tl_seen: 0.0,
-            source: String::new(), src_key: String::new(), src_at: 0.0 };
+            source: String::new(), src_key: String::new(), src_at: 0.0, pref_app: String::new(), empty_since: 0.0, had_song: false };
+        let mut chosen: Option<Session> = None;
         loop {
             let res: windows::core::Result<()> = (|| {
                 if mgr.is_none() {
                     mgr = Some(Manager::RequestAsync()?.get()?);
                 }
                 let m = mgr.as_ref().unwrap();
-                let sess = m.GetCurrentSession().ok();
+                let sess = pick_session(m, &st.pref_app);
+                if let Some(s) = &sess {
+                    st.pref_app = aumid(s);
+                }
+                chosen = sess.clone();
                 while let Ok(c) = rx.try_recv() {
                     if let Some(s) = &sess {
                         command(s, &c);
@@ -207,6 +251,21 @@ mod imp {
                     o.insert("_tl".into(), json!(st.tl_key.map(|k| vec![k.0, k.1])));
                 }
                 let now = now_s();
+                // "tidak ada lagu" sesaat (Windows kadang gagal membaca) jangan langsung dikirim:
+                // tunggu 2,5 detik supaya lirik tidak terhapus di tengah lagu
+                let has = info["has"].as_bool().unwrap_or(false);
+                if has {
+                    st.empty_since = 0.0;
+                    st.had_song = true;
+                } else if st.had_song {
+                    if st.empty_since == 0.0 {
+                        st.empty_since = now;
+                    }
+                    if now - st.empty_since < 2.5 {
+                        return Ok(());
+                    }
+                    st.had_song = false;
+                }
                 if st.last_payload.as_ref() != Some(&payload) || now - st.last_sent > 2.5 {
                     st.last_payload = Some(payload);
                     st.last_sent = now;
@@ -217,15 +276,22 @@ mod imp {
             if let Err(e) = res {
                 log(format!("media {}", e));
                 mgr = None;
-                emit("media", json!({"available": true, "has": false}).to_string());
-                std::thread::sleep(Duration::from_millis(1500));
+                // gagal sesaat: lagu dianggap masih diputar; baru dilaporkan berhenti kalau gagal terus > 3 d
+                let now = now_s();
+                if st.empty_since == 0.0 {
+                    st.empty_since = now;
+                }
+                if now - st.empty_since > 3.0 && st.had_song {
+                    st.had_song = false;
+                    st.last_payload = None;
+                    emit("media", json!({"available": true, "has": false}).to_string());
+                }
+                std::thread::sleep(Duration::from_millis(700));
             }
             // tunggu 0,5 d, tapi langsung bangun kalau ada perintah
             if let Ok(c) = rx.recv_timeout(Duration::from_millis(500)) {
-                if let Some(m) = &mgr {
-                    if let Ok(s) = m.GetCurrentSession() {
-                        command(&s, &c);
-                    }
+                if let Some(s) = &chosen {
+                    command(s, &c);
                 }
             }
         }

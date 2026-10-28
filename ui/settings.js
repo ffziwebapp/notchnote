@@ -181,7 +181,8 @@
           row('Tulis prioritas tugas', 'Misalnya "(prioritas tinggi)" di belakang kegiatan', tog('logbook.prio')));
     },
     music() {
-      return group('Lirik', row('Lirik di notch kecil', 'Baris lirik berjalan di notch saat lagu diputar', tog('notch.lyrics')) +
+      return group('Lirik', row('Lirik di halaman Musik', 'Matikan kalau hanya ingin kontrol musik. Bisa juga lewat tombol lirik di halaman Musik.', tog('music.showLyr')) +
+          row('Lirik di notch kecil', 'Baris lirik berjalan di notch saat lagu diputar', tog('notch.lyrics')) +
           row('Ukuran lirik', 'Di halaman Musik', seg('music.lyrSize', [['s', 'Kecil'], ['m', 'Sedang'], ['l', 'Besar']])) +
           row('Majukan lirik (semua lagu)', 'Kalau lirik sering terlambat dari suara penyanyi, pilih nilai plus. Untuk satu lagu saja, atur di halaman Musik.',
             seg('music.lead', [[-0.5, '−0,5 d'], [0, '0'], [0.3, '+0,3 d'], [0.6, '+0,6 d'], [1, '+1 d']]))) +

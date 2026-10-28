@@ -24,7 +24,10 @@
   // kursor keluar dari notch (dilaporkan aplikasi): pastikan antarmuka tahu, walau WebView2 tidak mengirim pointerleave
   T.event.listen('hoverOut', () => {
     const NN = window.NN, el = document.getElementById('island');
-    if (NN && NN.isl && NN.isl.hovered && el) el.dispatchEvent(new PointerEvent('pointerleave', { bubbles: false }));
+    if (!NN || !NN.isl || !el || (!NN.isl.hovered && NN.isl.view !== 'page')) return;
+    const ev = new PointerEvent('pointerleave', { bubbles: false });
+    ev.nnSynthetic = true;
+    el.dispatchEvent(ev);
   });
   // tanpa menu klik kanan bawaan browser
   document.addEventListener('contextmenu', e => { if (!e.target.closest('input, textarea, [contenteditable]')) e.preventDefault(); });

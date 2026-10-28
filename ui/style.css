@@ -833,3 +833,8 @@ svg.owl .happy { stroke: #170f45; }
 .lbapps span { width: 100%; font-size: 11px; color: var(--fg3); margin-bottom: 1px; }
 .lbapps em { font-style: normal; font-size: 11.5px; padding: 2px 8px; border-radius: 7px; background: var(--surf2); color: var(--fg2); }
 .lbnone { font-size: 12px; line-height: 1.5; }
+/* musik tanpa lirik */
+.mus.nolyr { grid-template-columns: minmax(0, 1fr); }
+.mus.nolyr .mus-l { border-right: 0; padding: 14px 22px; }
+.mus-c .lyrtog { width: 34px; height: 34px; color: var(--fg2); }
+.mus-c .lyrtog.on { color: var(--acc-text); background: var(--acc-soft); }

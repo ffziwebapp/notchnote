@@ -257,6 +257,9 @@ fn second_loop(core: Arc<Core>) {
         if ticks % 3 == 0 {
             window::check_monitors(&core);
         }
+        if ticks % 2 == 1 {
+            window::sync_actual(&core, false);
+        }
         window::check_fullscreen(&core);
         let weather_on = jbool(&core.cfg.lock().unwrap(), &["general", "weather"], true);
         let due = { now_s() - *core.weather_at.lock().unwrap() > 1800.0 };
@@ -479,6 +482,15 @@ async fn call(name: String, args: Vec<Value>, state: tauri::State<'_, Arc<Core>>
             if let Some((t, ar)) = l.key.split_once('|') {
                 let (e, t, ar) = (core.emitter(), t.to_string(), ar.to_string());
                 std::thread::spawn(move || lyrics::fetch(&e, &t, &ar, &l.album, l.dur, true));
+            }
+            Value::Null
+        }
+        "lyricsGet" => {
+            // antarmuka kehilangan lirik lagu yang sedang diputar: kirim ulang (dari cache kalau ada)
+            let l = core.media_last.lock().unwrap().clone();
+            if let Some((t, ar)) = l.key.split_once('|') {
+                let (e, t, ar) = (core.emitter(), t.to_string(), ar.to_string());
+                std::thread::spawn(move || lyrics::fetch(&e, &t, &ar, &l.album, l.dur, false));
             }
             Value::Null
         }
