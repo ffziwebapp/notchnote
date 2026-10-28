@@ -1,6 +1,6 @@
 [package]
 name = "notchnote"
-version = "1.2.2"
+version = "1.2.3"
 description = "NotchNote - notch produktivitas untuk Windows"
 authors = ["NotchNote"]
 edition = "2021"

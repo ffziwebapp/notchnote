@@ -110,14 +110,35 @@ fn lyr_cache(key: &str) -> std::path::PathBuf {
     p(&["lyrics", &format!("{}.json", &sha1_hex(key.as_bytes())[..20])])
 }
 
-fn lrclib_search(params: &[(&str, String)]) -> Vec<Value> {
+/// LRCLIB sering sibuk (galat 503/429): coba ulang sampai 3 kali dengan jeda
+fn lrc_json(url: &str) -> Result<Value, String> {
+    let mut last = String::new();
+    for i in 0..3 {
+        match http_json(url, 10) {
+            Ok(v) => return Ok(v),
+            Err(e) if e == "HTTP 404" => return Err(e),
+            Err(e) => {
+                let busy = e.starts_with("HTTP 5") || e == "HTTP 429" || !e.starts_with("HTTP");
+                last = e;
+                if !busy {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(700 * (i + 1)));
+            }
+        }
+    }
+    Err(last)
+}
+
+/// None = server gagal dihubungi
+fn lrclib_search(params: &[(&str, String)]) -> Option<Vec<Value>> {
     let q: Vec<String> = params.iter().map(|(k, v)| format!("{}={}", k, urlencoding::encode(v))).collect();
-    match http_json(&format!("https://lrclib.net/api/search?{}", q.join("&")), 10) {
-        Ok(Value::Array(a)) => a,
-        Ok(_) => vec![],
+    match lrc_json(&format!("https://lrclib.net/api/search?{}", q.join("&"))) {
+        Ok(Value::Array(a)) => Some(a),
+        Ok(_) => Some(vec![]),
         Err(e) => {
             log(format!("lrclib search {}", e));
-            vec![]
+            None
         }
     }
 }
@@ -144,7 +165,14 @@ fn best_match(results: &[Value], title: &str, artist: &str, dur: f64) -> Option<
         if st < 0.55 {
             continue;
         }
-        let mut sc = 2.5 * st + if artist.is_empty() { 0.0 } else { 1.2 * sim(artist, &s(r, "artistName")) };
+        let sa = if artist.is_empty() { 1.0 } else { sim(artist, &s(r, "artistName")) };
+        let rd0 = dur_of(r);
+        let same_len = dur > 0.0 && rd0 > 0.0 && (rd0 - dur).abs() <= 3.0;
+        // artis jelas berbeda: hanya diterima kalau judul hampir sama persis DAN durasinya sama
+        if !artist.is_empty() && sa < 0.45 && !(st >= 0.9 && same_len) {
+            continue;
+        }
+        let mut sc = 2.5 * st + if artist.is_empty() { 0.0 } else { 1.2 * sa };
         sc += if has(r, "syncedLyrics") { 2.0 } else if has(r, "plainLyrics") { 0.5 } else { -5.0 };
         let rd = dur_of(r);
         if dur > 0.0 && rd > 0.0 {
@@ -159,13 +187,20 @@ fn best_match(results: &[Value], title: &str, artist: &str, dur: f64) -> Option<
     best.cloned()
 }
 
+fn push(results: &mut Vec<Value>, err: &mut bool, r: Option<Vec<Value>>) {
+    match r {
+        Some(v) => results.extend(v),
+        None => *err = true,
+    }
+}
+
 pub fn fetch(emit: &Emit, title: &str, artist: &str, album: &str, dur: f64, force: bool) {
     let key = format!("{}|{}", title, artist);
     let cache = lyr_cache(&key);
     let mut c = read_json(&cache, Value::Null);
     if !c.is_null() && !force {
         let manual = c.get("manual").and_then(|x| x.as_bool()).unwrap_or(false);
-        let v2 = c.get("v").and_then(|x| x.as_i64()) == Some(2);
+        let v2 = c.get("v").and_then(|x| x.as_i64()) == Some(3);
         let ok = s(&c, "status") == "ok";
         let fresh = now_s() - c.get("t").and_then(|x| x.as_f64()).unwrap_or(0.0) < 2.0 * 86400.0;
         if manual || (v2 && (ok || fresh)) {
@@ -186,7 +221,7 @@ pub fn fetch(emit: &Emit, title: &str, artist: &str, album: &str, dur: f64, forc
         if !album.is_empty() {
             q += &format!("&album_name={}", urlencoding::encode(album));
         }
-        match http_json(&format!("https://lrclib.net/api/get?{}", q), 10) {
+        match lrc_json(&format!("https://lrclib.net/api/get?{}", q)) {
             Ok(r) if has(&r, "syncedLyrics") || has(&r, "plainLyrics") => found = Some(r),
             Ok(_) => {}
             Err(e) if e == "HTTP 404" => {}
@@ -196,14 +231,14 @@ pub fn fetch(emit: &Emit, title: &str, artist: &str, album: &str, dur: f64, forc
             }
         }
     }
-    if !err && !found.as_ref().map(|f| has(f, "syncedLyrics")).unwrap_or(false) {
+    if !found.as_ref().map(|f| has(f, "syncedLyrics")).unwrap_or(false) {
         let mut best_all: Option<Value> = None;
         for (t, a) in cands.iter().take(3) {
             if !a.is_empty() {
-                results.extend(lrclib_search(&[("track_name", t.clone()), ("artist_name", a.clone())]));
-                results.extend(lrclib_search(&[("q", format!("{} {}", a, t))]));
+                push(&mut results, &mut err, lrclib_search(&[("track_name", t.clone()), ("artist_name", a.clone())]));
+                push(&mut results, &mut err, lrclib_search(&[("q", format!("{} {}", a, t))]));
             }
-            results.extend(lrclib_search(&[("q", t.clone())]));
+            push(&mut results, &mut err, lrclib_search(&[("q", t.clone())]));
             if let Some(m) = best_match(&results, t, a, dur) {
                 if has(&m, "syncedLyrics") && close(&m) {
                     found = Some(m);
@@ -250,7 +285,7 @@ pub fn fetch(emit: &Emit, title: &str, artist: &str, album: &str, dur: f64, forc
         _ => json!({"status": "none", "query": if a0.is_empty() { t0.clone() } else { format!("{} - {}", a0, t0) }}),
     };
     out["t"] = json!(now_s());
-    out["v"] = json!(2);
+    out["v"] = json!(3);
     if s(&out, "status") != "error" {
         write_json(&cache, &out);
     }
@@ -259,7 +294,7 @@ pub fn fetch(emit: &Emit, title: &str, artist: &str, album: &str, dur: f64, forc
 }
 
 pub fn search(emit: &Emit, key: &str, query: &str) {
-    let res = lrclib_search(&[("q", query.to_string())]);
+    let res = lrclib_search(&[("q", query.to_string())]).unwrap_or_default();
     let out: Vec<Value> = res
         .iter()
         .filter(|r| has(r, "syncedLyrics") || has(r, "plainLyrics"))
@@ -275,7 +310,7 @@ pub fn pick(emit: &Emit, key: &str, id: i64) {
         Ok(r) => {
             let artist_n = s(&r, "artistName");
             let o = json!({"status": "ok", "synced": s(&r, "syncedLyrics"), "plain": s(&r, "plainLyrics"), "source": "LRCLIB",
-                "instrumental": r.get("instrumental").and_then(|x| x.as_bool()).unwrap_or(false), "manual": true, "ldur": dur_of(&r), "v": 2,
+                "instrumental": r.get("instrumental").and_then(|x| x.as_bool()).unwrap_or(false), "manual": true, "ldur": dur_of(&r), "v": 3,
                 "match": s(&r, "trackName") + &(if artist_n.is_empty() { String::new() } else { format!(" — {}", artist_n) }), "t": now_s()});
             write_json(&lyr_cache(key), &o);
             o
@@ -310,6 +345,15 @@ mod tests {
         assert!(sim("Amin Paling Serius", "amin paling serius") > 0.99);
         assert!((ratio(&"abcd".chars().collect::<Vec<_>>(), &"bcde".chars().collect::<Vec<_>>()) - 0.75).abs() < 1e-9);
         assert!(is_ad("Spotify.exe", "Spotify", ""));
+    }
+    #[test]
+    fn tolak_artis_beda() {
+        let r = vec![json!({"trackName": "Claude", "artistName": "An Unknown Artist", "duration": 375.0, "syncedLyrics": "[00:01.00] x"})];
+        assert!(best_match(&r, "Claude", "Fireship", 612.0).is_none(), "video Claude tidak boleh diberi lirik lagu lain");
+        let r = vec![json!({"trackName": "Jiwa Yang Bersedih", "artistName": "Ghea Indrawari", "duration": 245.0, "syncedLyrics": "[00:01.00] x"})];
+        assert!(best_match(&r, "Jiwa Yang Bersedih", "Ghea Indrawari", 246.0).is_some());
+        // nama kanal YouTube beda dengan artis, tapi judul & durasi sama -> tetap diterima
+        assert!(best_match(&r, "Jiwa Yang Bersedih", "Sony Music Indonesia", 245.5).is_some());
     }
 }
 

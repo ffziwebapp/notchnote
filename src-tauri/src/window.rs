@@ -153,7 +153,8 @@ pub fn layout_for(ws: &WinState, dock: &str, m: &Mon, along: Option<f64>, center
 /// Info tata letak untuk antarmuka, dihitung dari posisi kiri-atas area isi jendela (piksel fisik)
 pub fn lay_from(dock: &str, anchor: (f64, f64), grow: &str, work: (f64, f64, f64, f64), origin: (f64, f64), z: f64) -> Value {
     let (gx, gy, gw, gh) = work;
-    json!({"dock": dock, "ax": (anchor.0 - origin.0) / z, "ay": (anchor.1 - origin.1) / z, "grow": grow,
+    // pz = piksel fisik per piksel CSS yang dipakai di sini; antarmuka mengoreksi kalau skala sebenarnya berbeda
+    json!({"dock": dock, "ax": (anchor.0 - origin.0) / z, "ay": (anchor.1 - origin.1) / z, "grow": grow, "pz": z,
         "scr": {"x": (gx - origin.0) / z, "y": (gy - origin.1) / z, "w": gw / z, "h": gh / z}})
 }
 

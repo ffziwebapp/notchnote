@@ -204,6 +204,11 @@ impl Core {
         if self.ready.swap(true, Ordering::SeqCst) {
             return;
         }
+        // terapkan ulang ukuran notch setelah halaman selesai dimuat (WebView2 kadang mengabaikan zoom yang diatur terlalu awal)
+        let zoom = self.win.lock().unwrap().zoom;
+        if let Some(w) = self.window() {
+            let _ = w.set_zoom(zoom);
+        }
         window::place(self, false);
         window::show(self);
         update_hotkeys(self);

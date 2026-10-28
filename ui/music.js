@@ -90,7 +90,12 @@
         // lirik yang sudah ada jangan ditimpa status "mencari" dari permintaan ulang
         if (l.status === 'loading' && M.lyr && M.lyr.status === 'ok') return;
         l.lines = l.synced ? parseLRC(l.synced) : [];
-        if (l.status !== 'loading') M.cache[l.key] = l;
+        if (l.status !== 'loading' && l.status !== 'error') M.cache[l.key] = l;
+        // server lirik sedang sibuk: coba lagi otomatis sekali setelah 15 detik
+        if (l.status === 'error' && !(M.retried || {})[l.key]) {
+          M.retried = M.retried || {}; M.retried[l.key] = 1;
+          setTimeout(() => { if (M.key() === l.key && M.lyr && M.lyr.status === 'error') NN.call('lyricsRetry'); }, 15000);
+        }
         M.lyr = l; M.lines = l.lines; M.idx = -1;
         if (this.visible()) this.render(this.el);
       });
