@@ -3,6 +3,7 @@
 
 mod ai;
 mod clips;
+mod guard;
 mod lyrics;
 mod media;
 mod sound;
@@ -216,13 +217,13 @@ impl Core {
         let (tx, rx) = std::sync::mpsc::channel::<String>();
         *self.media_tx.lock().unwrap() = Some(tx);
         let (e, last) = (self.emitter(), self.media_last.clone());
-        std::thread::spawn(move || media::run(e, rx, last));
+        spawn_named("musik", move || media::run(e, rx, last));
         // detik
         let c = self.clone();
-        std::thread::spawn(move || second_loop(c));
+        spawn_named("detik", move || second_loop(c));
         // clipboard
         let c = self.clone();
-        std::thread::spawn(move || clip_loop(c));
+        spawn_named("klip", move || clip_loop(c));
         let st = self.tracker.lock().unwrap().stats_json();
         self.emit("stats", st);
         self.emit("status", self.battery().to_string());
@@ -233,6 +234,18 @@ impl Core {
             let _ = tx.send(c);
         }
     }
+}
+
+/// Thread bernama, supaya catatan galat menyebut bagian mana yang bermasalah.
+fn spawn_named<F: FnOnce() + Send + 'static>(name: &str, f: F) {
+    if let Err(e) = std::thread::Builder::new().name(name.into()).spawn(f) {
+        log(format!("thread {} gagal dibuat: {}", name, e));
+    }
+}
+
+/// Untuk main(): kalau proses ini penjaga (lihat guard.rs), jalankan penjaga dan kembalikan true.
+pub fn guard_main() -> bool {
+    guard::run_watcher_if_asked()
 }
 
 fn second_loop(core: Arc<Core>) {
@@ -629,6 +642,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![call])
         .setup(|app| {
+            // catat penyebab kalau aplikasi berhenti mendadak, dan buka lagi otomatis
+            guard::start();
             // versi Python lama: tutup, dan pindahkan autostart ke aplikasi ini
             let n = sys::stop_python_copies();
             if n > 0 {
@@ -745,7 +760,7 @@ pub fn run() {
 
             // seret, klik-tembus, dan kursor
             let c3 = core.clone();
-            std::thread::spawn(move || window::ui_loop(c3));
+            spawn_named("jendela", move || window::ui_loop(c3));
             // uji otomatis (hanya build debug): laporkan keadaan antarmuka ke ui.json
             #[cfg(debug_assertions)]
             if std::env::var("NOTCHNOTE_SELFTEST").is_ok() {

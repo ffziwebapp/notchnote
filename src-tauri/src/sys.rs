@@ -143,7 +143,7 @@ mod imp {
     pub fn keep_top(raw: *mut c_void) {
         unsafe {
             let _ = SetWindowPos(hwnd_from(raw), Some(HWND_TOPMOST), 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS);
         }
     }
 

@@ -1,6 +1,6 @@
 [package]
 name = "notchnote"
-version = "1.2.4"
+version = "1.2.5"
 description = "NotchNote - notch produktivitas untuk Windows"
 authors = ["NotchNote"]
 edition = "2021"
@@ -44,7 +44,11 @@ windows = { version = "0.61", features = [
   "Win32_Media_Audio",
   "Win32_Security_Cryptography",
   "Win32_System_Com",
+  "Win32_System_Console",
   "Win32_System_DataExchange",
+  "Win32_System_Diagnostics_Debug",
+  "Win32_System_Kernel",
+  "Win32_System_LibraryLoader",
   "Win32_System_Power",
   "Win32_System_SystemInformation",
   "Win32_System_Threading",
