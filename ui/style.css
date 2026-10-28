@@ -838,3 +838,5 @@ svg.owl .happy { stroke: #170f45; }
 .mus.nolyr .mus-l { border-right: 0; padding: 14px 22px; }
 .mus-c .lyrtog { width: 34px; height: 34px; color: var(--fg2); }
 .mus-c .lyrtog.on { color: var(--acc-text); background: var(--acc-soft); }
+.demos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.demos .chip { display: inline-flex; align-items: center; gap: 6px; }

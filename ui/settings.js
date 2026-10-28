@@ -193,6 +193,8 @@
       return group('Umum', row('Mulai bersama Windows', 'NotchNote menyala otomatis saat komputer hidup', '<button class="tog" id="autoTog" data-auto></button>') +
           row('Pintasan keyboard', hk.map(h => '<span class="kbd">' + h[0] + '</span> ' + h[1]).join('<br>'), tog('general.hotkeys')) +
           row('Cuaca di baris status', 'Dari Open-Meteo, memakai kota di pengaturan Sholat', tog('general.weather'))) +
+        group('Coba pengingat', '<div class="srow col"><div class="sl"><b>Lihat contoh setiap pemberitahuan</b><small>Muncul di notch persis seperti aslinya, lengkap dengan bunyinya. Datamu tidak berubah.</small></div>' +
+          '<div class="demos">' + NN.DEMOS.map(d => '<button class="chip sm" data-demo="' + d[0] + '">' + icon(d[1], 14) + d[2] + '</button>').join('') + '</div></div>') +
         group('Data', row('Folder data', 'Semua data tersimpan hanya di komputer ini', '<button class="btn sm" data-do="folder">' + icon('folder', 14) + 'Buka folder</button>') +
           row('Reset statistik fokus hari ini', '', '<button class="btn sm ghost danger" data-do="resetstats">Reset</button>')) +
         group('Tentang', row('NotchNote ' + esc((NN.init && NN.init.version) || ''), 'Berjalan dari: ' + esc((NN.init && NN.init.appPath) || '-') + '. Folder versi lama boleh dihapus.', '') +
@@ -238,6 +240,7 @@
       const showErr = (id, msg, inp) => { const e = NN.$('#' + CSS.escape(id), el); if (e) { e.textContent = msg; e.classList.toggle('hide', !msg); } if (inp) inp.classList.toggle('err', !!msg); };
       el.onclick = e => {
         const t = e.target;
+        const dm = t.closest('[data-demo]'); if (dm) { NN.demo(dm.dataset.demo); return; }
         const ddb = t.closest('[data-ddb]'), ddo = t.closest('[data-ddv]');
         NN.$$('.dd.open', el).forEach(d => { if (!ddb || d !== ddb.parentNode) d.classList.remove('open', 'up'); });
         if (ddb) {
