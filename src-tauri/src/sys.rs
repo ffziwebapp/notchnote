@@ -147,6 +147,18 @@ mod imp {
         }
     }
 
+    /// Apakah jendela aktif (foreground) adalah jendela ini atau milik jendela ini
+    pub fn is_foreground(raw: *mut c_void) -> bool {
+        unsafe {
+            let fg = GetForegroundWindow();
+            if fg.0.is_null() {
+                return false;
+            }
+            let me = hwnd_from(raw);
+            fg == me || GetAncestor(fg, GA_ROOTOWNER) == me || GetAncestor(fg, GA_ROOT) == me
+        }
+    }
+
     pub fn force_foreground(raw: *mut c_void) {
         unsafe {
             let _ = SetForegroundWindow(hwnd_from(raw));
@@ -326,6 +338,7 @@ mod imp {
     pub fn window_titles_containing(_key: &str) -> Vec<String> { vec![] }
     pub fn keep_top(_raw: *mut c_void) {}
     pub fn force_foreground(_raw: *mut c_void) {}
+    pub fn is_foreground(_raw: *mut c_void) -> bool { false }
     pub fn dpapi(_data: &[u8], _protect: bool) -> Option<Vec<u8>> { None }
     pub fn battery() -> Option<(i64, bool)> { None }
     pub fn reg_get(_name: &str) -> Option<String> { None }

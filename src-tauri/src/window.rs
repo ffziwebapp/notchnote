@@ -1,6 +1,6 @@
 //! Jendela notch: posisi menempel (atas/bawah/kiri/kanan) atau melayang, seret, klik-tembus, kursor untuk mata Notnot.
 //!
-//! Jendelanya selalu seukuran kanvas CSS 1440x960 (dikali zoom). Antarmuka melaporkan kotak notch (setRect);
+//! Saat diseret jendelanya seukuran kanvas CSS 1440x960 (dikali zoom); saat diam dipotong agar muat di layar. Antarmuka melaporkan kotak notch (setRect);
 //! di luar kotak itu jendela dibuat tembus klik, jadi aplikasi di belakangnya tetap bisa dipakai.
 
 use crate::store::{jbool, jf64, jstr, log, now_s, p, write_json};
@@ -34,6 +34,7 @@ pub struct WinState {
     pub zoom: f64,
     pub sf: f64,
     pub pos: (f64, f64),
+    pub size: (u32, u32),
     pub drag: Option<Drag>,
     pub rect: Option<[f64; 4]>,
     pub fs_hidden: bool,
@@ -56,7 +57,7 @@ impl WinState {
                 st[k] = v;
             }
         }
-        WinState { st, zoom, sf: 0.0, pos: (0.0, 0.0), drag: None, rect: None, fs_hidden: false, force_until: 0.0, last_cursor: None,
+        WinState { st, zoom, sf: 0.0, pos: (0.0, 0.0), size: (0, 0), drag: None, rect: None, fs_hidden: false, force_until: 0.0, last_cursor: None,
             ignoring: None, layout: json!({}), mon_sig: String::new(), visible: false }
     }
 }
@@ -94,50 +95,60 @@ pub fn screen_in(all: &[Mon], prim: Option<Mon>, ws: &WinState) -> Option<Mon> {
     all.iter().find(|m| !name.is_empty() && m.name == name).cloned().or(prim).or_else(|| all.first().cloned())
 }
 
-/// Posisi jendela (piksel fisik) + info tata letak untuk antarmuka (piksel CSS)
-pub fn layout_for(ws: &WinState, dock: &str, m: &Mon, along: Option<f64>, center: Option<(f64, f64)>) -> ((f64, f64), Value) {
+/// Posisi & ukuran jendela (piksel fisik) + info tata letak untuk antarmuka (piksel CSS).
+///
+/// `fit = true` (saat diam): jendela dipotong supaya muat di area layar dan titik jangkar notch dihitung ulang.
+/// Jendela yang lebih besar dari layar dipotong Windows sendiri, sehingga notch di kanan/bawah bisa hilang.
+/// `fit = false` (saat diseret): jendela tetap seukuran kanvas penuh dan ikut kursor.
+pub fn layout_for(ws: &WinState, dock: &str, m: &Mon, along: Option<f64>, center: Option<(f64, f64)>, fit: bool) -> ((f64, f64), (u32, u32), Value) {
     let (gx, gy, gw, gh) = m.work;
     let z = ws.zoom * m.sf;
     let (w, h) = (CSS_W * z, CSS_H * z);
     let mut grow = "down";
     let along_v = along.unwrap_or_else(|| jf64(&ws.st, &["along"], 0.5));
-    let (x, y, ax, ay);
+    // titik jangkar notch di layar + posisi jendela kanvas penuh
+    let (anchor, mut x, mut y);
     match dock {
         "top" | "bottom" => {
             let cx = gx + along_v * gw;
+            anchor = (cx, if dock == "top" { gy } else { gy + gh });
             x = cx - w / 2.0;
             y = if dock == "top" { gy } else { gy + gh - h };
-            ax = CSS_W / 2.0;
-            ay = if dock == "top" { 0.0 } else { CSS_H };
         }
         "left" | "right" => {
             let cy = gy + along_v * gh;
+            anchor = (if dock == "left" { gx } else { gx + gw }, cy);
             y = cy - h / 2.0;
             x = if dock == "left" { gx } else { gx + gw - w };
-            ax = if dock == "left" { 0.0 } else { CSS_W };
-            ay = CSS_H / 2.0;
         }
         _ => {
             let c = center.unwrap_or((gx + jf64(&ws.st, &["fx"], 0.5) * gw, gy + jf64(&ws.st, &["fy"], 0.2) * gh));
+            anchor = c;
             x = c.0 - w / 2.0;
             y = c.1 - h / 2.0;
-            ax = CSS_W / 2.0;
-            ay = CSS_H / 2.0;
             grow = if c.1 < gy + gh / 2.0 { "down" } else { "up" };
         }
     }
-    let lay = json!({"dock": dock, "ax": ax, "ay": ay, "grow": grow,
+    let (mut ww, mut wh) = (w, h);
+    if fit {
+        ww = w.min(gw);
+        wh = h.min(gh);
+        x = x.max(gx).min(gx + gw - ww);
+        y = y.max(gy).min(gy + gh - wh);
+    }
+    let (x, y) = (x.round(), y.round());
+    let lay = json!({"dock": dock, "ax": (anchor.0 - x) / z, "ay": (anchor.1 - y) / z, "grow": grow,
         "scr": {"x": (gx - x) / z, "y": (gy - y) / z, "w": gw / z, "h": gh / z}});
-    ((x.round(), y.round()), lay)
+    ((x, y), (ww.round() as u32, wh.round() as u32), lay)
 }
 
 /// Hitung perpindahan (tanpa menyentuh jendela; dipanggil sambil memegang kunci)
-fn plan_move(ws: &mut WinState, pos: (f64, f64), sf: f64) -> (Option<(u32, u32)>, (i32, i32)) {
-    let z = ws.zoom * sf;
-    let size = if (sf - ws.sf).abs() > 1e-6 { Some(((CSS_W * z).round() as u32, (CSS_H * z).round() as u32)) } else { None };
+fn plan_move(ws: &mut WinState, pos: (f64, f64), size: (u32, u32), sf: f64) -> (Option<(u32, u32)>, (i32, i32)) {
+    let resize = if ws.size != size || (sf - ws.sf).abs() > 1e-6 { Some(size) } else { None };
     ws.sf = sf;
+    ws.size = size;
     ws.pos = pos;
-    (size, (pos.0 as i32, pos.1 as i32))
+    (resize, (pos.0 as i32, pos.1 as i32))
 }
 
 /// Terapkan perpindahan (dipanggil SETELAH kunci dilepas)
@@ -155,8 +166,8 @@ pub fn place(core: &Core, dragging: bool) {
     let mut ws = core.win.lock().unwrap();
     let Some(m) = screen_in(&all, prim, &ws) else { return };
     let dock = jstr(&ws.st, &["dock"]);
-    let (pos, mut lay) = layout_for(&ws, if dock.is_empty() { "top" } else { &dock }, &m, None, None);
-    let mv = plan_move(&mut ws, pos, m.sf);
+    let (pos, size, mut lay) = layout_for(&ws, if dock.is_empty() { "top" } else { &dock }, &m, None, None, true);
+    let mv = plan_move(&mut ws, pos, size, m.sf);
     lay["dragging"] = json!(dragging);
     ws.layout = lay.clone();
     drop(ws);
@@ -250,13 +261,14 @@ fn drag_tick(core: &Core) {
         "left" | "right" => Some(((center.1 - gy) / gh.max(1.0)).clamp(0.0, 1.0)),
         _ => None,
     };
-    let (pos, mut lay) = layout_for(&ws, dock, &m, along, Some(center));
-    let mv = plan_move(&mut ws, pos, m.sf);
+    let (pos, size, mut lay) = layout_for(&ws, dock, &m, along, Some(center), false);
+    let size_changed = size != ws.size;
+    let mv = plan_move(&mut ws, pos, size, m.sf);
     let d = ws.drag.as_mut().unwrap();
     d.along = along;
     d.center = center;
     d.last = Some(dock.into());
-    let emit_now = d.dock.as_deref() != Some(dock) || d.sname != m.name;
+    let emit_now = d.dock.as_deref() != Some(dock) || d.sname != m.name || size_changed;
     if emit_now {
         d.dock = Some(dock.into());
         d.sname = m.name.clone();
@@ -316,6 +328,9 @@ fn set_ignore(core: &Core, ignore: bool) {
 /// Dipanggil terus-menerus dari thread latar: seret, klik-tembus, dan posisi kursor untuk mata Notnot.
 pub fn ui_loop(core: std::sync::Arc<Core>) {
     let mut last_feed = 0.0f64;
+    let mut last_inside = false;
+    let mut last_active: Option<bool> = None;
+    let mut last_active_check = 0.0f64;
     loop {
         let dragging = core.win.lock().unwrap().drag.is_some();
         if dragging {
@@ -336,6 +351,12 @@ pub fn ui_loop(core: std::sync::Arc<Core>) {
                         })
                         .unwrap_or(false);
                 set_ignore(&core, !inside);
+                // kursor benar-benar keluar dari notch: beri tahu antarmuka (WebView2 kadang tidak mengirim "pointerleave"
+                // setelah jendela dibuat tembus klik, sehingga panel tidak menutup sendiri)
+                if last_inside && !inside {
+                    let _ = core.app.emit("hoverOut", true);
+                }
+                last_inside = inside;
                 // kursor untuk mata Notnot (~30x per detik)
                 let t = now_s();
                 if !dragging && t - last_feed > 0.033 {
@@ -357,6 +378,25 @@ pub fn ui_loop(core: std::sync::Arc<Core>) {
                 }
             }
         }
+        // jendela aktif atau tidak, dibaca langsung dari Windows (sinyal fokus WebView2 bisa meleset saat diklik)
+        #[cfg(windows)]
+        {
+            let t = now_s();
+            if t - last_active_check > 0.1 {
+                last_active_check = t;
+                if let Some(w) = core.window() {
+                    if let Ok(h) = w.hwnd() {
+                        let a = crate::sys::is_foreground(h.0 as *mut std::ffi::c_void);
+                        if last_active != Some(a) {
+                            last_active = Some(a);
+                            let _ = core.app.emit("active", a);
+                        }
+                    }
+                }
+            }
+        }
+        #[cfg(not(windows))]
+        let _ = (&mut last_active, &mut last_active_check);
         std::thread::sleep(std::time::Duration::from_millis(if dragging { 10 } else { 16 }));
     }
 }
@@ -438,5 +478,35 @@ pub fn show(core: &Core) {
     core.win.lock().unwrap().visible = true;
     if let Some(w) = core.window() {
         let _ = w.show();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    /// Notch harus selalu berada di dalam jendela dan di dalam layar, di posisi mana pun.
+    #[test]
+    fn notch_selalu_di_dalam_jendela() {
+        for sf in [1.0, 1.25, 1.5, 1.75] {
+            let m = Mon { name: "A".into(), full: (0.0, 0.0, 1920.0, 1080.0), work: (0.0, 0.0, 1920.0, 1032.0), sf };
+            for dock in ["top", "bottom", "left", "right", "float"] {
+                let w = WinState { st: json!({"dock": dock, "along": 0.5, "fx": 0.5, "fy": 0.5}), zoom: 1.0, sf: 0.0, pos: (0.0, 0.0), size: (0, 0), drag: None,
+                    rect: None, fs_hidden: false, force_until: 0.0, last_cursor: None, ignoring: None, layout: json!({}), mon_sig: String::new(), visible: true };
+                let ((x, y), (ww, wh), lay) = layout_for(&w, dock, &m, None, None, true);
+                let (ax, ay) = (lay["ax"].as_f64().unwrap(), lay["ay"].as_f64().unwrap());
+                let (cw, ch) = (ww as f64 / sf, wh as f64 / sf);
+                assert!(x >= 0.0 && y >= 0.0 && x + ww as f64 <= 1920.5 && y + wh as f64 <= 1032.5, "{dock} {sf}: jendela di luar layar");
+                assert!(ax >= -0.5 && ax <= cw + 0.5 && ay >= -0.5 && ay <= ch + 0.5, "{dock} {sf}: jangkar ({ax},{ay}) di luar jendela {cw}x{ch}");
+                let (sx, sy) = (x + ax * sf, y + ay * sf);
+                let ok = match dock {
+                    "top" => sy.abs() < 1.0 && (sx - 960.0).abs() < 1.0,
+                    "bottom" => (sy - 1032.0).abs() < 1.0 && (sx - 960.0).abs() < 1.0,
+                    "left" => sx.abs() < 1.0 && (sy - 516.0).abs() < 1.0,
+                    "right" => (sx - 1920.0).abs() < 1.0 && (sy - 516.0).abs() < 1.0,
+                    _ => (sx - 960.0).abs() < 1.0 && (sy - 516.0).abs() < 1.0,
+                };
+                assert!(ok, "{dock} {sf}: titik notch di layar ({sx},{sy}) salah");
+            }
+        }
     }
 }

@@ -633,11 +633,17 @@
       if (isl.view === 'alert' && isl.alert && isl.alert._expire) dismissAlert();
       if (isl.view === 'page' && !isl.pinned) {
         clearTimeout(leaveT);
-        // setelah diklik/dipakai, panel tidak menutup hanya karena kursor keluar (misal saat membuka daftar pilihan)
-        const wait = isl.engaged ? 15000 : (NN.cfg.notch.hover ? 700 : 1300);
-        leaveT = setTimeout(() => {
-          if (!isl.hovered && isl.view === 'page' && !isl.pinned && !NN.isTyping() && !NN.busy && !NN.dialog && !NN.selectOpen() && !NN.$('.dd.open')) NN.collapse();
-        }, wait);
+        // kursor menjauh -> panel menutup sendiri. Ditunda selama daftar pilihan/dialog terbuka,
+        // atau selama kamu masih mengetik (ada ketikan dalam 4 detik terakhir).
+        const wait = isl.engaged ? 1500 : (NN.cfg.notch.hover ? 700 : 1300);
+        const tryClose = () => {
+          if (isl.hovered || isl.view !== 'page' || isl.pinned || isl.dragging) return;
+          if (NN.busy || NN.dialog || NN.selectOpen() || NN.$('.dd.open')) { leaveT = setTimeout(tryClose, 800); return; }
+          if (NN.isTyping() && Date.now() - (isl.lastKey || 0) < 4000) { leaveT = setTimeout(tryClose, 1000); return; }
+          const a = document.activeElement; if (a && a !== document.body && a.blur) a.blur();
+          NN.collapse();
+        };
+        leaveT = setTimeout(tryClose, wait);
       }
     });
     el.addEventListener('pointerdown', e => {
@@ -690,6 +696,7 @@
       if (a && a.dataset.act === 'open-url') { e.preventDefault(); NN.call('openUrl', a.dataset.url); }
     });
     document.addEventListener('keydown', e => {
+      isl.lastKey = Date.now();
       if (e.key === 'Escape') {
         const p = NN.pages[isl.page];
         if (isl.view === 'page' && p && p.back && p.back()) return;

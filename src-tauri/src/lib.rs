@@ -669,12 +669,16 @@ pub fn run() {
             }
             let w = b.build()?;
             let _ = w.set_zoom(zoom);
-            let c2 = core.clone();
-            w.on_window_event(move |ev| {
-                if let tauri::WindowEvent::Focused(f) = ev {
-                    let _ = c2.app.emit("active", *f);
-                }
-            });
+            // di Windows status aktif dibaca langsung dari sistem (lihat window::ui_loop)
+            #[cfg(not(windows))]
+            {
+                let c2 = core.clone();
+                w.on_window_event(move |ev| {
+                    if let tauri::WindowEvent::Focused(f) = ev {
+                        let _ = c2.app.emit("active", *f);
+                    }
+                });
+            }
 
             // ikon di tray
             let h = app.handle();

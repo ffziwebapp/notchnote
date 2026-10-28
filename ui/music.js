@@ -307,8 +307,9 @@
       if (vert) return { kind: 'music', html: '<span class="c-stat" style="color:var(--acc-text)">' + icon('music', 16) + '</span>' };
       if (NN.cfg.notch.lyrics && M.lines.length) {
         const i = M.active(), L = i >= 0 ? M.lines[i] : null;
-        if (L && L.gap) return { kind: 'music', html: '<span class="lyr gapdots" data-i="' + i + '"><i></i><i></i><i></i></span>' };
-        if (L && L.text) return { kind: 'music', html: '<span class="lyr" data-i="' + i + '">' + esc(L.text) + '</span>' };
+        // visualizer kecil tetap tampil di samping baris lirik
+        if (L && L.gap) return { kind: 'music', html: waves() + '<span class="lyr gapdots" data-i="' + i + '"><i></i><i></i><i></i></span>' };
+        if (L && L.text) return { kind: 'music', html: waves() + '<span class="lyr" data-i="' + i + '">' + esc(L.text) + '</span>' };
       }
       return { kind: 'music', html: '<span class="c-title">' + esc(s.title) + '</span>' + waves() };
     },
