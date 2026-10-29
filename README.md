@@ -31,7 +31,7 @@ NotchNote aman dipasang, dan semua hal di bawah bisa kamu periksa sendiri.
 
 **3. Periksa dengan antivirus.** Buka [virustotal.com](https://www.virustotal.com), pilih tab **URL**, lalu tempel link unduhan installer dari halaman Releases. File akan diperiksa oleh sekitar 70 antivirus sekaligus.
 
-Hasil pemeriksaan versi 1.2.5: [link unduhan](https://www.virustotal.com/gui/url/2a47051db3bf15ff55609e090cb7d300431f48e002c2707855c0551634000caf/detection) · [file installer](https://www.virustotal.com/gui/file/b69ce06851e1651a6551d84584aff98a99d2ddbdc2701866ad9ce088bbd37e50/detection)
+Hasil pemeriksaan versi 1.2.5 (29 Oktober 2026): **0 dari 93 antivirus menandai bahaya**. Lihat [link unduhan](https://www.virustotal.com/gui/url/2a47051db3bf15ff55609e090cb7d300431f48e002c2707855c0551634000caf/detection) · [file installer](https://www.virustotal.com/gui/file/b69ce06851e1651a6551d84584aff98a99d2ddbdc2701866ad9ce088bbd37e50/detection)
 Aplikasi baru yang belum punya tanda tangan digital kadang ditandai oleh 1–2 antivirus kecil dengan nama umum seperti "Generic" atau "ML". Itu salah deteksi yang biasa terjadi pada aplikasi baru. Hal yang sama juga menjadi penyebab Windows menampilkan "Windows protected your PC".
 
 **4. Pastikan file tidak diubah orang lain.** Setiap rilis mencantumkan sidik jari file (SHA-256). Setelah mengunduh, buka PowerShell di folder Downloads lalu jalankan:
