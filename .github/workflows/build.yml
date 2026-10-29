@@ -3,6 +3,8 @@ name: Build NotchNote
 on:
   push:
     branches: [main]
+    # perubahan dokumen saja tidak membuat ulang installer (supaya sidik jari & hasil VirusTotal tetap berlaku)
+    paths-ignore: ["**.md", "LICENSE"]
     tags: ["v*"]
   release:
     types: [published]
