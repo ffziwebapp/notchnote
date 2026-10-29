@@ -21,6 +21,48 @@ Tidak perlu memasang Python atau aplikasi lain. Kalau komputernya belum punya Mi
 - API key AI disimpan terenkripsi dengan akun Windows dan hanya dikirim ke penyedia AI-nya. Setiap orang memakai API key-nya sendiri.
 - Pengguna versi Python sebelumnya: data langsung terbaca. Versi Python yang masih berjalan otomatis ditutup, dan "Mulai bersama Windows" dipindah ke aplikasi ini.
 
+## Keamanan
+
+NotchNote aman dipasang, dan semua hal di bawah bisa kamu periksa sendiri.
+
+**1. Kode terbuka.** Seluruh kode aplikasi ada di repositori ini. Siapa pun bisa membaca apa saja yang dilakukan aplikasi.
+
+**2. Installer dibuat oleh server GitHub, bukan di komputer pribadi.** Setiap rilis dibuat otomatis oleh [GitHub Actions](../../actions) langsung dari kode di repositori ini. Langkah-langkahnya bisa dilihat di [`.github/workflows/build.yml`](.github/workflows/build.yml). Jadi file yang kamu unduh dari halaman [Releases](../../releases) memang hasil dari kode yang terlihat di sini.
+
+**3. Periksa dengan antivirus.** Buka [virustotal.com](https://www.virustotal.com), pilih tab **URL**, lalu tempel link unduhan installer dari halaman Releases. File akan diperiksa oleh sekitar 70 antivirus sekaligus.
+Aplikasi baru yang belum punya tanda tangan digital kadang ditandai oleh 1–2 antivirus kecil dengan nama umum seperti "Generic" atau "ML". Itu salah deteksi yang biasa terjadi pada aplikasi baru. Hal yang sama juga menjadi penyebab Windows menampilkan "Windows protected your PC".
+
+**4. Pastikan file tidak diubah orang lain.** Setiap rilis mencantumkan sidik jari file (SHA-256). Setelah mengunduh, buka PowerShell di folder Downloads lalu jalankan:
+
+```powershell
+Get-FileHash .\NotchNote_*_x64-setup.exe
+```
+
+Kalau angka yang muncul sama dengan yang tertulis di halaman rilis, file itu asli.
+
+**5. Apa saja yang dilakukan aplikasi di komputermu**
+
+| | |
+|---|---|
+| Hak akses | Dipasang hanya untuk akun Windows-mu (tidak butuh izin Administrator) |
+| Data | Disimpan hanya di `%APPDATA%\NotchNote`. Tidak ada akun dan tidak ada server NotchNote |
+| Statistik fokus | Nama aplikasi yang sedang aktif dihitung di komputermu sendiri dan tidak dikirim ke mana pun |
+| Klip | Riwayat salin/screenshot disimpan lokal. Isi yang ditandai rahasia oleh pengelola kata sandi tidak direkam |
+| Jadwal sholat | Dihitung di komputermu, tanpa internet |
+| Mulai bersama Windows | Hanya kalau diaktifkan, dan bisa dimatikan di Pengaturan |
+
+**Koneksi internet yang dipakai**, hanya untuk fitur berikut:
+
+| Fitur | Ke mana | Yang dikirim |
+|---|---|---|
+| Lirik lagu | `lrclib.net`, `api.lyrics.ovh` | Judul dan penyanyi lagu yang sedang diputar |
+| Cuaca | `api.open-meteo.com` | Koordinat kota yang kamu pilih di Pengaturan (bisa dimatikan) |
+| Asisten AI | Penyedia yang kamu pilih sendiri (Claude, OpenAI, Gemini, Groq, OpenRouter), atau Ollama di komputermu sendiri | Pesan yang kamu ketik, memakai API key milikmu sendiri |
+
+API key disimpan terenkripsi dengan akun Windows-mu (Windows DPAPI) dan hanya dikirim ke penyedianya. Tidak ada data yang dikirim ke pembuat NotchNote.
+
+Menemukan masalah keamanan? Lihat [SECURITY.md](SECURITY.md).
+
 ## Untuk pengembang
 
 - `ui/`: antarmuka (HTML, CSS, JS)
